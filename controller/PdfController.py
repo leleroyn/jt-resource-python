@@ -16,10 +16,9 @@ async def convent_pdf_to_image(file: UploadFile, merge: str = Form(default="0"))
     """
     替代方案：合并时保持每页原始比例，不填充白色
     """
-    res = []
-    
-    # 将PDF转换为图片，使用高质量DPI (300)
-    images = convent_page_to_image(file.file.read(), dpi=300)
+    res = []    
+   
+    images = convent_page_to_image(file.file.read(), dpi=200)
     merge = int(merge)
     
     # 处理每页图片
