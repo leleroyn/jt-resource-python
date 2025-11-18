@@ -14,41 +14,56 @@ app = APIRouter()
 @app.post("/convent_pdf_to_image")
 async def convent_pdf_to_image(file: UploadFile, merge: str = Form(default="0")):
     """
-    把pdf文件转换成图片
-    :param file:  pdf文件
-    :param merge: 是否合并成一张大图
-    :return: 图片base64内容数组
+    替代方案：合并时保持每页原始比例，不填充白色
     """
     res = []
-    mask_images = []
+    
+    # 将PDF转换为图片
     images = convent_page_to_image(file.file.read())
     merge = int(merge)
-    top_img = pil2cv(Image.open(BytesIO(images[0])))
-    resize_w = 1920 if top_img.shape[1] > 1920 else top_img.shape[1]
-    dsize = (resize_w, int(resize_w * top_img.shape[0] / top_img.shape[1]))
-    for i in range(len(images)):
-        cur_img = Image.open(BytesIO(images[i]))
-        cur_img = pil2cv(cur_img)
-        # mask_text_on_bottom(str(i + 1) + "/" + str(len(images)), cur_img, (0, 0, 0))
-        cur_img = cv2.resize(cur_img, dsize=dsize, fx=1, fy=1, interpolation=cv2.INTER_LINEAR)
-        mask_images.append(cur_img)
-
+    
+    # 处理每页图片
+    processed_images = []
+    for image_bytes in images:
+        cur_img_pil = Image.open(BytesIO(image_bytes))
+        cur_img_cv = pil2cv(cur_img_pil)
+        
+        # 简单的尺寸调整（可选）
+        original_height, original_width = cur_img_cv.shape[:2]
+        if original_width > 1920:
+            scale_factor = 1920 / original_width
+            new_width = 1920
+            new_height = int(original_height * scale_factor)
+            resized_img = cv2.resize(cur_img_cv, (new_width, new_height))
+            processed_images.append(resized_img)
+        else:
+            processed_images.append(cur_img_cv)
+    
     if merge == 1:
-        separator = np.zeros((1, mask_images[0].shape[1], 3), dtype=np.uint8)
-        separator[:, :, :] = [0, 0, 0]  # 设置分隔线颜色
-        mask_images_with_seps = []
-        for image in mask_images:
-            height, width, _ = image.shape
-            modified_image = np.concatenate((image, separator), axis=0)
-            mask_images_with_seps.append(modified_image)
-        merge_img = cv2.vconcat(mask_images_with_seps)
-        merge_img = cv2pil(merge_img)
-        res.append(image_to_base64(merge_img))
-        return res
+        # 直接合并，不统一宽度（每页宽度可能不同）
+        separator = np.ones((5, max(img.shape[1] for img in processed_images), 3), dtype=np.uint8) * 255
+        
+        images_with_seps = []
+        for i, img in enumerate(processed_images):
+            # 如果当前图片宽度小于分隔线宽度，居中显示
+            if img.shape[1] < separator.shape[1]:
+                padding_left = (separator.shape[1] - img.shape[1]) // 2
+                padded_img = np.ones((img.shape[0], separator.shape[1], 3), dtype=np.uint8) * 255
+                padded_img[:, padding_left:padding_left+img.shape[1]] = img
+                images_with_seps.append(padded_img)
+            else:
+                images_with_seps.append(img)
+            
+            if i < len(processed_images) - 1:
+                images_with_seps.append(separator)
+        
+        merge_img = cv2.vconcat(images_with_seps)
+        merge_img_pil = cv2pil(merge_img)
+        return [image_to_base64(merge_img_pil)]
     else:
-        for cur_img in mask_images:
-            cur_img = cv2pil(cur_img)
-            res.append(image_to_base64(cur_img))
+        for img in processed_images:
+            img_pil = cv2pil(img)
+            res.append(image_to_base64(img_pil))
         return res
 
 
