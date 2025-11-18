@@ -18,8 +18,8 @@ async def convent_pdf_to_image(file: UploadFile, merge: str = Form(default="0"))
     """
     res = []
     
-    # 将PDF转换为图片
-    images = convent_page_to_image(file.file.read())
+    # 将PDF转换为图片，使用高质量DPI (300)
+    images = convent_page_to_image(file.file.read(), dpi=300)
     merge = int(merge)
     
     # 处理每页图片
@@ -81,7 +81,7 @@ async def compress_pdf(file: UploadFile, size: str = Form(default="10")):
     ratio = 80
     ret_pdf_bits = None
     while compress_size * 1024 * 1024 < file_size:
-        pics = pdf_to_pic(file_bites, ratio)
+        pics = pdf_to_pic(file_bites, ratio, dpi=300)
         ret_pdf_bits = pic_to_pdf(pics)
         file_size = len(ret_pdf_bits)
         ratio = ratio - 10
